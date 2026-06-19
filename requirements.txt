@@ -10,3 +10,5 @@ folium
 streamlit-folium
 seaborn
 matplotlib
+category_encoders
+shap

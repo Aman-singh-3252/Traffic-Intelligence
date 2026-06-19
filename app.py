@@ -100,11 +100,17 @@ try:
     model_type = artifacts['model_type']
     model_r2 = artifacts['r2']
     model_rmse = artifacts['rmse']
-    junction_encoder = artifacts['junction_encoder']
-    police_encoder = artifacts['police_encoder']
+    pipeline = artifacts['feature_pipeline']
     cluster_profiles = artifacts['cluster_profiles']
     pii_df = artifacts['pii_df']
     heatmap_coords = artifacts['heatmap_coords']
+    
+    # SHAP and explainability artifacts
+    explainer = artifacts.get('explainer')
+    shap_values = artifacts.get('shap_values')
+    feature_cols = artifacts.get('feature_cols')
+    X_test_engineered = artifacts.get('X_test_engineered')
+    y_test = artifacts.get('y_test')
 except Exception as e:
     st.error(f"Failed to load or train model: {e}")
     st.stop()
@@ -451,19 +457,7 @@ with tab2:
             for idx, cluster in cluster_profiles.iterrows():
                 cid = cluster['Cluster_ID']
                 
-                # Encode junction and police station
-                try:
-                    j_enc = junction_encoder.transform([cluster['junction_name']])[0]
-                except ValueError:
-                    j_enc = junction_encoder.transform(['Unknown'])[0]
-                    
-                try:
-                    p_enc = police_encoder.transform([cluster['police_station']])[0]
-                except ValueError:
-                    p_enc = police_encoder.transform(['Unknown'])[0]
-                
-                # Match features exactly:
-                # ['Hour', 'DayOfWeek', 'Month', 'Weekend_Flag', 'Cluster_ID', 'vehicle_severity', 'violation_severity', 'junction_name_encoded', 'police_station_encoded']
+                # Prepare a DataFrame matching the feature pipeline input shape
                 features = pd.DataFrame([{
                     'Hour': pred_hour,
                     'DayOfWeek': day_of_week,
@@ -472,11 +466,15 @@ with tab2:
                     'Cluster_ID': cid,
                     'vehicle_severity': cluster['avg_vehicle_severity'],
                     'violation_severity': cluster['avg_violation_severity'],
-                    'junction_name_encoded': j_enc,
-                    'police_station_encoded': p_enc
+                    'junction_name': cluster['junction_name'],
+                    'police_station': cluster['police_station']
                 }])
                 
-                pred_val = model.predict(features)[0]
+                # Transform using the upgraded pipeline
+                features_engineered = pipeline.transform(features)
+                model_features = features_engineered[feature_cols]
+                
+                pred_val = model.predict(model_features)[0]
                 # Clip prediction to >= 0
                 pred_val = max(0.0, float(pred_val))
                 
@@ -594,13 +592,25 @@ with tab2:
         # Predict priority list
         col_list, col_chart = st.columns([3, 2])
         with col_list:
-            st.write("**Top Predicted High-Risk Zones**")
-            pred_display = pred_df[[
-                'Cluster_ID', 'predicted_violations', 'Risk_Category', 'junction_name', 'police_station'
+            st.write("**Top Prescriptive Patrol & Action Planning**")
+            
+            # Step 7: Apply the predictive & prescriptive operational rules engine
+            import data_pipeline
+            prescribed_df = data_pipeline.prescribe_operational_actions(pred_df['predicted_violations'])
+            
+            # Combine the predictions and prescriptive recommendations
+            pred_df_full = pd.concat([pred_df, prescribed_df.drop(columns=['Predicted_Violations'])], axis=1)
+            
+            pred_display = pred_df_full[[
+                'Cluster_ID', 'predicted_violations', 'Risk_Level', 
+                'Suggested_Patrol_Units', 'Enforcement_Priority', 
+                'junction_name', 'police_station'
             ]].copy()
             pred_display['predicted_violations'] = pred_display['predicted_violations'].round(2)
             pred_display.columns = [
-                'Cluster ID', 'Forecasted Violations', 'Risk Category', 'Junction Name', 'Police Station'
+                'Cluster ID', 'Predicted Violations', 'Risk Level', 
+                'Patrol Units Needed', 'Priority Rank', 
+                'Junction Name', 'Police Station'
             ]
             st.dataframe(pred_display.head(15), use_container_width=True, hide_index=True)
             
@@ -619,3 +629,42 @@ with tab2:
                 legend=dict(orientation="h", yanchor="bottom", y=-0.1, xanchor="center", x=0.5)
             )
             st.plotly_chart(fig_pie, use_container_width=True)
+            
+        st.write("---")
+        st.subheader("🔍 Hackathon Special: Model Explainability (SHAP Diagnostics)")
+        st.write("Below are the SHAP plots generated on the validation dataset to explain the model predictions to judges.")
+        
+        col_shap1, col_shap2 = st.columns(2)
+        with col_shap1:
+            st.markdown("**Global Feature Importance (SHAP Summary Plot)**")
+            if shap_values is not None:
+                import matplotlib.pyplot as plt
+                import shap
+                fig, ax = plt.subplots(figsize=(6, 4))
+                fig.patch.set_facecolor('none')
+                shap.summary_plot(shap_values, X_test_engineered, show=False, plot_size=None)
+                # Style plot elements to blend into Streamlit UI
+                ax.tick_params(colors='#FAFAFA')
+                ax.xaxis.label.set_color('#FAFAFA')
+                ax.yaxis.label.set_color('#FAFAFA')
+                st.pyplot(fig, bbox_inches='tight')
+                plt.close(fig)
+            else:
+                st.info("SHAP values not available.")
+                
+        with col_shap2:
+            st.markdown("**Individual Prediction Breakdown (SHAP Waterfall Plot)**")
+            if shap_values is not None and y_test is not None:
+                import matplotlib.pyplot as plt
+                import shap
+                # Find the index of the highest violation prediction in the test set
+                y_test_reset = y_test.reset_index(drop=True)
+                max_idx = int(y_test_reset.idxmax())
+                
+                fig2, ax2 = plt.subplots(figsize=(6, 4))
+                fig2.patch.set_facecolor('none')
+                shap.plots.waterfall(shap_values[max_idx], show=False)
+                st.pyplot(fig2, bbox_inches='tight')
+                plt.close(fig2)
+            else:
+                st.info("SHAP values/Test set not available.")

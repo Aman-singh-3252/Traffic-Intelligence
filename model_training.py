@@ -18,9 +18,11 @@ def train_and_evaluate():
     - Loads and preprocesses data
     - Calculates PII scores for ranking
     - Prepares aggregated training dataset
-    - Encodes categorical columns
+    - Splits train and test sets to prevent target leakage
+    - Fits and transforms variables using the HackathonFeaturePipeline
     - Trains XGBoost and LightGBM models
-    - Compares performance and saves the best model
+    - Compares performance and saves the best model with feature pipelines
+    - Computes SHAP explainability assets
     """
     print("Starting Model Training Pipeline...")
     
@@ -33,36 +35,40 @@ def train_and_evaluate():
     # 3. Create cluster profiles for looking up coordinates and names during inference
     cluster_profiles = data_pipeline.build_cluster_profiles(df)
     
-    # 4. Fit Label Encoders
-    print("Fitting categorical label encoders...")
-    junction_encoder = LabelEncoder()
-    # Handle unseen categories by adding a default class in the encoder classes if needed,
-    # but since we fit on all possible values from raw and aggregated data, we are safe.
-    all_junctions = list(df['junction_name'].unique()) + ['No Junction', 'Unknown']
-    junction_encoder.fit(all_junctions)
-    
-    police_encoder = LabelEncoder()
-    all_police = list(df['police_station'].unique()) + ['Unknown']
-    police_encoder.fit(all_police)
-    
-    # Encode categorical columns in aggregated training data
-    agg_df['junction_name_encoded'] = junction_encoder.transform(agg_df['junction_name'])
-    agg_df['police_station_encoded'] = police_encoder.transform(agg_df['police_station'])
-    
-    # 5. Define features and target
-    feature_cols = [
+    # 4. Define features and target (including raw string categoricals)
+    feature_cols_raw = [
         'Hour', 'DayOfWeek', 'Month', 'Weekend_Flag', 'Cluster_ID',
         'vehicle_severity', 'violation_severity', 
-        'junction_name_encoded', 'police_station_encoded'
+        'junction_name', 'police_station'
     ]
     target_col = 'violation_count'
     
-    X = agg_df[feature_cols]
+    X = agg_df[feature_cols_raw]
     y = agg_df[target_col]
     
-    # 6. Train-test split
+    # 5. Train-test split (Before fitting encoders to prevent leakage)
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     print(f"Training set size: {X_train.shape[0]}, Test set size: {X_test.shape[0]}")
+    
+    # 6. Fit and Apply Feature Pipeline (Step 3 & 4: Target Encoding, Step 5: Sizing)
+    print("Applying Hackathon Feature Pipeline (Target Encoders, Cyclical, Density)...")
+    pipeline = data_pipeline.HackathonFeaturePipeline()
+    pipeline.fit(X_train, y_train, df_raw=df)
+    
+    X_train_engineered = pipeline.transform(X_train)
+    X_test_engineered = pipeline.transform(X_test)
+    
+    # Final feature columns list
+    feature_cols = [
+        'Hour', 'DayOfWeek', 'Month', 'Weekend_Flag', 'Cluster_ID',
+        'vehicle_severity', 'violation_severity', 
+        'Hour_sin', 'Hour_cos', 'DOW_sin', 'DOW_cos', 'Peak_Hour',
+        'junction_name_encoded', 'police_station_encoded',
+        'junction_risk_score', 'cluster_density'
+    ]
+    
+    X_tr = X_train_engineered[feature_cols]
+    X_te = X_test_engineered[feature_cols]
     
     # 7. Train XGBoost
     print("Training XGBoost Regressor...")
@@ -73,8 +79,8 @@ def train_and_evaluate():
         random_state=42, 
         n_jobs=-1
     )
-    xgb_model.fit(X_train, y_train)
-    xgb_preds = xgb_model.predict(X_test)
+    xgb_model.fit(X_tr, y_train)
+    xgb_preds = xgb_model.predict(X_te)
     xgb_r2 = r2_score(y_test, xgb_preds)
     xgb_rmse = np.sqrt(mean_squared_error(y_test, xgb_preds))
     print(f"XGBoost Evaluation - R^2: {xgb_r2:.4f}, RMSE: {xgb_rmse:.4f}")
@@ -89,8 +95,8 @@ def train_and_evaluate():
         n_jobs=-1,
         verbose=-1
     )
-    lgb_model.fit(X_train, y_train)
-    lgb_preds = lgb_model.predict(X_test)
+    lgb_model.fit(X_tr, y_train)
+    lgb_preds = lgb_model.predict(X_te)
     lgb_r2 = r2_score(y_test, lgb_preds)
     lgb_rmse = np.sqrt(mean_squared_error(y_test, lgb_preds))
     print(f"LightGBM Evaluation - R^2: {lgb_r2:.4f}, RMSE: {lgb_rmse:.4f}")
@@ -109,6 +115,13 @@ def train_and_evaluate():
         
     print(f"Best model selected: {best_type} with R^2={best_r2:.4f} and RMSE={best_rmse:.4f}")
     
+    # 10. SHAP Explainability (Step 6)
+    print("Initializing SHAP TreeExplainer...")
+    import shap
+    explainer = shap.TreeExplainer(best_model)
+    print("Calculating SHAP values for X_test...")
+    shap_values = explainer(X_te)
+    
     # Save optimized historical coordinate array (only lat, lon) for dashboard heatmap
     heatmap_coords = df[['latitude', 'longitude']].values
     
@@ -118,11 +131,15 @@ def train_and_evaluate():
         'model_type': best_type,
         'r2': best_r2,
         'rmse': best_rmse,
-        'junction_encoder': junction_encoder,
-        'police_encoder': police_encoder,
+        'feature_pipeline': pipeline,
         'cluster_profiles': cluster_profiles,
         'pii_df': pii_df,
-        'heatmap_coords': heatmap_coords
+        'heatmap_coords': heatmap_coords,
+        'explainer': explainer,
+        'shap_values': shap_values,
+        'feature_cols': feature_cols,
+        'X_test_engineered': X_te,
+        'y_test': y_test
     }
     
     print(f"Saving model artifacts to {config.MODEL_PATH}...")

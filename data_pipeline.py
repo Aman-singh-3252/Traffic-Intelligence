@@ -213,3 +213,116 @@ def run_pipeline(file_path=config.DATA_PATH, fill_zeros=True):
     
     agg_df = aggregate_data(df, fill_zeros=fill_zeros)
     return df, agg_df
+
+class HackathonFeaturePipeline:
+    def __init__(self):
+        self.target_encoder = None
+        self.junction_risk_mapping = {}
+        self.global_junction_risk_mean = 0.0
+        self.cluster_density_mapping = {}
+        
+    def fit(self, X_train, y_train, df_raw=None):
+        """
+        Fits all target-dependent encoders and cluster density mappings.
+        df_raw is the original raw dataframe df to calculate cluster density.
+        """
+        import numpy as np
+        import pandas as pd
+        from category_encoders import TargetEncoder
+        
+        y_train = pd.Series(y_train).reset_index(drop=True)
+        X_train = pd.DataFrame(X_train).reset_index(drop=True)
+        
+        # Step 3: Target Encoding for junction_name and police_station
+        self.target_encoder = TargetEncoder(cols=['junction_name', 'police_station'])
+        self.target_encoder.fit(X_train[['junction_name', 'police_station']], y_train)
+        
+        # Step 4: Junction Risk Score (strictly on training set)
+        temp_df = pd.DataFrame({
+            'junction_name': X_train['junction_name'],
+            'violation_count': y_train
+        })
+        self.junction_risk_mapping = temp_df.groupby('junction_name')['violation_count'].mean().to_dict()
+        self.global_junction_risk_mean = float(y_train.mean())
+        
+        # Step 5: Cluster Density Feature
+        if df_raw is not None:
+            # Count historical points in the raw clean data
+            self.cluster_density_mapping = df_raw['Cluster_ID'].value_counts().to_dict()
+        else:
+            # Fallback to train set target sum
+            self.cluster_density_mapping = X_train.groupby('Cluster_ID')['violation_count'].sum().to_dict()
+            
+        return self
+        
+    def transform(self, X):
+        """
+        Transforms X by adding features: Hour_sin, Hour_cos, DOW_sin, DOW_cos, Peak_Hour,
+        target-encoded columns, junction_risk_score, and cluster_density.
+        """
+        import numpy as np
+        import pandas as pd
+        
+        X = X.copy()
+        
+        # Step 1: Cyclical Time Encoding
+        # Hour (24-hour cycle)
+        X['Hour_sin'] = np.sin(2 * np.pi * X['Hour'] / 24.0)
+        X['Hour_cos'] = np.cos(2 * np.pi * X['Hour'] / 24.0)
+        # DayOfWeek (7-day cycle)
+        X['DOW_sin'] = np.sin(2 * np.pi * X['DayOfWeek'] / 7.0)
+        X['DOW_cos'] = np.cos(2 * np.pi * X['DayOfWeek'] / 7.0)
+        
+        # Step 2: Peak-Hour Intelligence (1 if Hour in [8, 9, 10, 17, 18, 19], else 0)
+        X['Peak_Hour'] = X['Hour'].isin([8, 9, 10, 17, 18, 19]).astype(int)
+        
+        # Step 3: Target Encoding
+        encoded_cats = self.target_encoder.transform(X[['junction_name', 'police_station']])
+        X['junction_name_encoded'] = encoded_cats['junction_name']
+        X['police_station_encoded'] = encoded_cats['police_station']
+        
+        # Step 4: Junction Risk Score
+        X['junction_risk_score'] = X['junction_name'].map(self.junction_risk_mapping).fillna(self.global_junction_risk_mean)
+        
+        # Step 5: Cluster Density Feature
+        X['cluster_density'] = X['Cluster_ID'].map(self.cluster_density_mapping).fillna(0.0)
+        
+        return X
+
+def prescribe_operational_actions(predictions):
+    """
+    Step 7: Predictive + Prescriptive Operational Layer
+    Takes an array of model predictions (expected violations) and returns a newly structured
+    Pandas DataFrame with columns:
+    - Predicted_Violations (The raw model output)
+    - Risk_Level: "High" (if > 40), "Medium" (if 20-40), "Low" (if < 20)
+    - Suggested_Patrol_Units: 3 (if High), 2 (if Medium), 1 (if Low)
+    - Enforcement_Priority: 1 (if High), 2 (if Medium), 3 (if Low)
+    """
+    import pandas as pd
+    import numpy as np
+    
+    # Convert predictions to a clean series
+    preds = pd.Series(predictions).astype(float)
+    
+    # Define conditions for categorization
+    conds = [
+        preds > 40.0,
+        (preds >= 20.0) & (preds <= 40.0),
+        preds < 20.0
+    ]
+    
+    risk_levels = ["High", "Medium", "Low"]
+    patrol_units = [3, 2, 1]
+    priorities = [1, 2, 3]
+    
+    prescribed_df = pd.DataFrame({
+        'Predicted_Violations': preds,
+        'Risk_Level': np.select(conds, risk_levels, default="Low"),
+        'Suggested_Patrol_Units': np.select(conds, patrol_units, default=1),
+        'Enforcement_Priority': np.select(conds, priorities, default=3)
+    })
+    
+    return prescribed_df
+
+
