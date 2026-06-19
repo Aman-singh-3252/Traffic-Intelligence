@@ -148,23 +148,31 @@ def build_cluster_profiles(df):
 def aggregate_data(df, fill_zeros=True):
     """
     Groups the data by Cluster_ID, Hour, DayOfWeek, and Month.
-    Calculates: Violation Count (Target), Average Vehicle Severity, and Average Violation Severity.
+    Calculates: Violation Count (Target) and joins static cluster profile severities to avoid leakage.
     """
     print("Aggregating data by cluster and time features...")
     # We train models only on non-noise points
     df_train = df[df['Cluster_ID'] != -1].copy()
     
-    # Group the active records
+    # Group the active records strictly to get the target count
     grouped = df_train.groupby(['Cluster_ID', 'Hour', 'DayOfWeek', 'Month']).agg(
-        violation_count=('id', 'count'),
-        vehicle_severity=('vehicle_severity', 'mean'),
-        violation_severity=('violation_severity', 'mean')
+        violation_count=('id', 'count')
     ).reset_index()
     
     if not fill_zeros:
-        # Get cluster profiles to join junction and police station
+        # Get cluster profiles to join static severities and categoricals
         profiles = build_cluster_profiles(df)
-        agg_df = pd.merge(grouped, profiles[['Cluster_ID', 'junction_name', 'police_station']], on='Cluster_ID')
+        agg_df = pd.merge(grouped, profiles, on='Cluster_ID')
+        
+        # Rename columns to match model features
+        agg_df = agg_df.rename(columns={
+            'avg_vehicle_severity': 'vehicle_severity',
+            'avg_violation_severity': 'violation_severity'
+        })
+        
+        # Drop total_violations to prevent target leakage
+        agg_df = agg_df.drop(columns=['total_violations'])
+        
         agg_df['Weekend_Flag'] = agg_df['DayOfWeek'].isin([5, 6]).astype(int)
         return agg_df
         
@@ -190,12 +198,14 @@ def aggregate_data(df, fill_zeros=True):
     profiles = build_cluster_profiles(df)
     agg_df = pd.merge(grouped, profiles, on='Cluster_ID', how='left')
     
-    # For severity values, if count is > 0 we keep the group average, else use the cluster average
-    agg_df['vehicle_severity'] = agg_df['vehicle_severity'].fillna(agg_df['avg_vehicle_severity'])
-    agg_df['violation_severity'] = agg_df['violation_severity'].fillna(agg_df['avg_violation_severity'])
+    # Map static cluster-wide averages to represent severity without leakage
+    agg_df = agg_df.rename(columns={
+        'avg_vehicle_severity': 'vehicle_severity',
+        'avg_violation_severity': 'violation_severity'
+    })
     
-    # Drop temporary average columns
-    agg_df = agg_df.drop(columns=['avg_vehicle_severity', 'avg_violation_severity'])
+    # Drop total_violations to prevent target leakage
+    agg_df = agg_df.drop(columns=['total_violations'])
     
     agg_df['Weekend_Flag'] = agg_df['DayOfWeek'].isin([5, 6]).astype(int)
     
