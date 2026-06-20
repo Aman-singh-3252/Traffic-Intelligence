@@ -140,45 +140,40 @@ for component, weight in config.PII_WEIGHTS.items():
 st.sidebar.markdown("---")
 st.sidebar.subheader("Risk Severity Legend")
 st.sidebar.markdown(
-    """
-    <div style="background: rgba(255, 255, 255, 0.03); padding: 12px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.05); margin-bottom: 1rem;">
-        <div style="display: flex; align-items: center; margin-bottom: 8px;">
-            <span style="height: 10px; width: 10px; background-color: #D32F2F; border-radius: 50%; display: inline-block; margin-right: 10px;"></span>
-            <span style="font-weight: 600; color: #FAFAFA; font-size: 0.85rem;">Critical Risk</span>
-        </div>
-        <div style="font-size: 0.75rem; color: #8C8C8C; margin-left: 20px; margin-bottom: 8px; margin-top: -6px;">
-            PII Score 36+ | Forecast 11+
-        </div>
-        
-        <div style="display: flex; align-items: center; margin-bottom: 8px;">
-            <span style="height: 10px; width: 10px; background-color: #F57C00; border-radius: 50%; display: inline-block; margin-right: 10px;"></span>
-            <span style="font-weight: 600; color: #FAFAFA; font-size: 0.85rem;">High Risk</span>
-        </div>
-        <div style="font-size: 0.75rem; color: #8C8C8C; margin-left: 20px; margin-bottom: 8px; margin-top: -6px;">
-            PII Score 26-35 | Forecast 6-10
-        </div>
-        
-        <div style="display: flex; align-items: center; margin-bottom: 8px;">
-            <span style="height: 10px; width: 10px; background-color: #FBC02D; border-radius: 50%; display: inline-block; margin-right: 10px;"></span>
-            <span style="font-weight: 600; color: #FAFAFA; font-size: 0.85rem;">Medium Risk</span>
-        </div>
-        <div style="font-size: 0.75rem; color: #8C8C8C; margin-left: 20px; margin-bottom: 8px; margin-top: -6px;">
-            PII Score 16-25 | Forecast 3-5
-        </div>
-        
-        <div style="display: flex; align-items: center; margin-bottom: 4px;">
-            <span style="height: 10px; width: 10px; background-color: #388E3C; border-radius: 50%; display: inline-block; margin-right: 10px;"></span>
-            <span style="font-weight: 600; color: #FAFAFA; font-size: 0.85rem;">Low Risk</span>
-        </div>
-        <div style="font-size: 0.75rem; color: #8C8C8C; margin-left: 20px; margin-top: -2px;">
-            PII Score 0-15 | Forecast 0-2
-        </div>
-    </div>
-    <div style="font-size: 0.75rem; color: #8C8C8C; margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 6px;">
-        * <b>PII:</b> Parking Impact Index (Current)<br/>
-        * <b>Forecast:</b> Predicted Violations/Hour (Future)
-    </div>
-    """,
+    """<div style="background: rgba(255, 255, 255, 0.03); padding: 12px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.05); margin-bottom: 1rem;">
+<div style="display: flex; align-items: center; margin-bottom: 8px;">
+<span style="height: 10px; width: 10px; background-color: #D32F2F; border-radius: 50%; display: inline-block; margin-right: 10px;"></span>
+<span style="font-weight: 600; color: #FAFAFA; font-size: 0.85rem;">Critical Risk</span>
+</div>
+<div style="font-size: 0.75rem; color: #8C8C8C; margin-left: 20px; margin-bottom: 8px; margin-top: -6px;">
+PII Score 36+ | Forecast 11+
+</div>
+<div style="display: flex; align-items: center; margin-bottom: 8px;">
+<span style="height: 10px; width: 10px; background-color: #F57C00; border-radius: 50%; display: inline-block; margin-right: 10px;"></span>
+<span style="font-weight: 600; color: #FAFAFA; font-size: 0.85rem;">High Risk</span>
+</div>
+<div style="font-size: 0.75rem; color: #8C8C8C; margin-left: 20px; margin-bottom: 8px; margin-top: -6px;">
+PII Score 26-35 | Forecast 6-10
+</div>
+<div style="display: flex; align-items: center; margin-bottom: 8px;">
+<span style="height: 10px; width: 10px; background-color: #FBC02D; border-radius: 50%; display: inline-block; margin-right: 10px;"></span>
+<span style="font-weight: 600; color: #FAFAFA; font-size: 0.85rem;">Medium Risk</span>
+</div>
+<div style="font-size: 0.75rem; color: #8C8C8C; margin-left: 20px; margin-bottom: 8px; margin-top: -6px;">
+PII Score 16-25 | Forecast 3-5
+</div>
+<div style="display: flex; align-items: center; margin-bottom: 4px;">
+<span style="height: 10px; width: 10px; background-color: #388E3C; border-radius: 50%; display: inline-block; margin-right: 10px;"></span>
+<span style="font-weight: 600; color: #FAFAFA; font-size: 0.85rem;">Low Risk</span>
+</div>
+<div style="font-size: 0.75rem; color: #8C8C8C; margin-left: 20px; margin-top: -2px;">
+PII Score 0-15 | Forecast 0-2
+</div>
+</div>
+<div style="font-size: 0.75rem; color: #8C8C8C; margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 6px;">
+* <b>PII:</b> Parking Impact Index (Current)<br/>
+* <b>Forecast:</b> Predicted Violations/Hour (Future)
+</div>""",
     unsafe_allow_html=True
 )
 
