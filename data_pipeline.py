@@ -305,9 +305,9 @@ def prescribe_operational_actions(predictions):
     Takes an array of model predictions (expected violations) and returns a newly structured
     Pandas DataFrame with columns:
     - Predicted_Violations (The raw model output)
-    - Risk_Level: "High" (if > 40), "Medium" (if 20-40), "Low" (if < 20)
-    - Suggested_Patrol_Units: 3 (if High), 2 (if Medium), 1 (if Low)
-    - Enforcement_Priority: 1 (if High), 2 (if Medium), 3 (if Low)
+    - Risk_Level: "Critical" (if > 10), "High" (if 6-10), "Medium" (if 3-5), "Low" (if <= 2)
+    - Suggested_Patrol_Units: 4 (if Critical), 3 (if High), 2 (if Medium), 1 (if Low)
+    - Enforcement_Priority: 1 (if Critical), 2 (if High), 3 (if Medium), 4 (if Low)
     """
     import pandas as pd
     import numpy as np
@@ -315,22 +315,23 @@ def prescribe_operational_actions(predictions):
     # Convert predictions to a clean series
     preds = pd.Series(predictions).astype(float)
     
-    # Define conditions for categorization
+    # Define conditions for categorization matching config.get_forecasting_category
     conds = [
-        preds > 40.0,
-        (preds >= 20.0) & (preds <= 40.0),
-        preds < 20.0
+        preds > 10.0,
+        (preds > 5.0) & (preds <= 10.0),
+        (preds > 2.0) & (preds <= 5.0),
+        preds <= 2.0
     ]
     
-    risk_levels = ["High", "Medium", "Low"]
-    patrol_units = [3, 2, 1]
-    priorities = [1, 2, 3]
+    risk_levels = ["Critical", "High", "Medium", "Low"]
+    patrol_units = [4, 3, 2, 1]
+    priorities = [1, 2, 3, 4]
     
     prescribed_df = pd.DataFrame({
         'Predicted_Violations': preds,
         'Risk_Level': np.select(conds, risk_levels, default="Low"),
         'Suggested_Patrol_Units': np.select(conds, patrol_units, default=1),
-        'Enforcement_Priority': np.select(conds, priorities, default=3)
+        'Enforcement_Priority': np.select(conds, priorities, default=4)
     })
     
     return prescribed_df
