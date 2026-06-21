@@ -635,13 +635,20 @@ with tab2:
             if shap_values is not None:
                 import matplotlib.pyplot as plt
                 import shap
+                
+                # Apply dark theme styling globally for matplotlib
+                plt.rcParams.update({
+                    "text.color": "#FAFAFA",
+                    "axes.labelcolor": "#FAFAFA",
+                    "xtick.color": "#FAFAFA",
+                    "ytick.color": "#FAFAFA",
+                    "figure.facecolor": "none",
+                    "axes.facecolor": "none",
+                    "axes.edgecolor": "#FAFAFA"
+                })
+                
                 fig, ax = plt.subplots(figsize=(6, 4))
-                fig.patch.set_facecolor('none')
                 shap.summary_plot(shap_values, X_test_engineered, show=False, plot_size=None)
-                # Style plot elements to blend into Streamlit UI
-                ax.tick_params(colors='#FAFAFA')
-                ax.xaxis.label.set_color('#FAFAFA')
-                ax.yaxis.label.set_color('#FAFAFA')
                 st.pyplot(fig, bbox_inches='tight')
                 plt.close(fig)
             else:
@@ -652,12 +659,23 @@ with tab2:
             if shap_values is not None and y_test is not None:
                 import matplotlib.pyplot as plt
                 import shap
+                
+                # Matplotlib styles persist, but reaffirming them for safety
+                plt.rcParams.update({
+                    "text.color": "#FAFAFA",
+                    "axes.labelcolor": "#FAFAFA",
+                    "xtick.color": "#FAFAFA",
+                    "ytick.color": "#FAFAFA",
+                    "figure.facecolor": "none",
+                    "axes.facecolor": "none",
+                    "axes.edgecolor": "#FAFAFA"
+                })
+                
                 # Find the index of the highest violation prediction in the test set
                 y_test_reset = y_test.reset_index(drop=True)
                 max_idx = int(y_test_reset.idxmax())
                 
                 fig2, ax2 = plt.subplots(figsize=(6, 4))
-                fig2.patch.set_facecolor('none')
                 shap.plots.waterfall(shap_values[max_idx], show=False)
                 st.pyplot(fig2, bbox_inches='tight')
                 plt.close(fig2)
